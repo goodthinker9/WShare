@@ -81,9 +81,15 @@ export default function AdminUsers() {
 
   const handleLoadStudentInfo = async (user) => {
     try {
-      const { data: userDetail } = await userAPI.getById(user.id);
-      setSelectedUserData(userDetail);
+      const { data } = await userAPI.getById(user.id);
+      setSelectedUserData(data.data);
       setSelectedUser(user);
+      setAssignData({
+        departmentId: data.data.department_id || '',
+        academicLevelId: data.data.academic_level_id || '',
+        semesterId: data.data.semester_id || '',
+        facultyId: data.data.faculty_id || '',
+      });
 
       // Try to load ID card
       try {
@@ -105,10 +111,19 @@ export default function AdminUsers() {
   };
 
 const handleVerify = async () => {
+    if (verifyAction === 'approved' && (!assignData.departmentId || !assignData.academicLevelId || !assignData.semesterId)) {
+      toast.error('Select the department, academic level, and semester before approving.');
+      return;
+    }
+
     try {
       await userAPI.verify(selectedUser.id, {
         action: verifyAction,
         reason: verifyAction === 'rejected' ? rejectionReason : undefined,
+        departmentId: verifyAction === 'approved' ? assignData.departmentId : undefined,
+        academicLevelId: verifyAction === 'approved' ? assignData.academicLevelId : undefined,
+        semesterId: verifyAction === 'approved' ? assignData.semesterId : undefined,
+        facultyId: verifyAction === 'approved' ? assignData.facultyId : undefined,
       });
       toast.success(`Student ${verifyAction} successfully!`);
       setShowVerifyModal(false);
@@ -176,6 +191,7 @@ const handleVerify = async () => {
     { header: 'Name', accessor: 'full_name' },
     { header: 'Email', accessor: 'email' },
     { header: 'Student ID', accessor: 'student_id' },
+    { header: 'Invitation Code', accessor: 'invitation_code', render: (row) => <span className="font-mono text-xs">{row.invitation_code || 'Not recorded'}</span> },
     { header: 'Role', accessor: 'role', render: (row) => <span className="capitalize badge-info">{row.role}</span> },
     { header: 'Status', accessor: 'account_status', render: (row) => (
       <span className={`capitalize ${row.account_status === 'active' ? 'badge-success' : row.account_status === 'pending' ? 'badge-warning' : 'badge-error'}`}>
@@ -226,7 +242,7 @@ const handleVerify = async () => {
           <span className="text-sm font-medium text-gray-700">
             Selected: {selectedUser.full_name}
           </span>
-          <button onClick={() => { setShowStudentInfoModal(true); handleLoadStudentInfo(selectedUser); }} className="btn-primary text-sm">
+          <button onClick={() => handleLoadStudentInfo(selectedUser)} className="btn-primary text-sm">
             Review & Verify
           </button>
           <button onClick={() => setShowAssignModal(true)} className="btn-secondary text-sm">
@@ -261,6 +277,11 @@ const handleVerify = async () => {
             {/* Student Registration Data */}
             <div className="bg-gray-50 rounded-xl p-5 border border-gray-200">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">Submitted Registration Data</h3>
+              {(!selectedUserData.email || !selectedUserData.department_id || !selectedUserData.academic_level_id || !selectedUserData.semester_id) && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  This student record is missing information from registration. Verify the student’s email and academic assignment before approval.
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-gray-400">Full Name</p>
@@ -268,11 +289,15 @@ const handleVerify = async () => {
                 </div>
                 <div>
                   <p className="text-xs text-gray-400">Email</p>
-                  <p className="text-sm font-medium text-gray-900">{selectedUserData.email}</p>
+                  <p className="text-sm font-medium text-gray-900">{selectedUserData.email || 'Not provided'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400">Student ID</p>
                   <p className="text-sm font-mono font-medium text-gray-900">{selectedUserData.student_id || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Invitation Code</p>
+                  <p className="text-sm font-mono font-medium text-primary-700">{selectedUserData.invitation_code || 'Not recorded'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400">Account Created</p>
@@ -331,6 +356,59 @@ const handleVerify = async () => {
             {/* Action area - Approve/Reject with Assign */}
             <div className="bg-white rounded-xl p-5 border border-gray-200">
               <h3 className="text-sm font-semibold text-gray-700 mb-4">Verification Action</h3>
+
+              {verifyAction === 'approved' && (
+                <div className="mb-5 rounded-lg border border-primary-100 bg-primary-50 p-4">
+                  <p className="mb-3 text-sm font-semibold text-gray-800">Academic Assignment</p>
+                  <p className="mb-4 text-xs text-gray-600">
+                    Confirm the department, academic level, and semester before approving this student.
+                  </p>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-700">Department</label>
+                      <select
+                        value={assignData.departmentId}
+                        onChange={(e) => setAssignData({ ...assignData, departmentId: e.target.value })}
+                        className="input-field"
+                        required
+                      >
+                        <option value="">Select department</option>
+                        {departments.map((department) => (
+                          <option key={department.id} value={department.id}>{department.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-700">Academic Level</label>
+                      <select
+                        value={assignData.academicLevelId}
+                        onChange={(e) => setAssignData({ ...assignData, academicLevelId: e.target.value })}
+                        className="input-field"
+                        required
+                      >
+                        <option value="">Select level</option>
+                        {levels.map((level) => (
+                          <option key={level.id} value={level.id}>{level.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-gray-700">Semester</label>
+                      <select
+                        value={assignData.semesterId}
+                        onChange={(e) => setAssignData({ ...assignData, semesterId: e.target.value })}
+                        className="input-field"
+                        required
+                      >
+                        <option value="">Select semester</option>
+                        {semesters.map((semester) => (
+                          <option key={semester.id} value={semester.id}>{semester.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center gap-3 mb-4">
                 <button

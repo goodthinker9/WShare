@@ -11,7 +11,7 @@ class UserService {
     const { p, l, offset } = getPagination(page, limit);
 
     let sql = `
-      SELECT u.id, u.full_name, u.email, u.student_id, u.role,
+      SELECT u.id, u.full_name, u.email, u.student_id, u.invitation_code, u.role,
              u.account_status, u.verification_status, u.created_at,
              d.name AS department_name,
              al.name AS academic_level_name,
