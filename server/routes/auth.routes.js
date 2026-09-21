@@ -12,6 +12,10 @@ const registerValidation = [
     .trim()
     .notEmpty().withMessage('Full name is required.')
     .isLength({ min: 2, max: 255 }).withMessage('Full name must be 2-255 characters.'),
+  body('email')
+    .trim()
+    .isEmail().withMessage('A valid email is required.')
+    .normalizeEmail(),
   body('password')
     .notEmpty().withMessage('Password is required.')
     .isLength({ min: 8 }).withMessage('Password must be at least 8 characters.')
@@ -27,15 +31,12 @@ const registerValidation = [
   body('studentId')
     .trim()
     .notEmpty().withMessage('Student ID is required.'),
-body('departmentId')
-    .notEmpty().withMessage('Department is required.')
-    .isInt().withMessage('Department must be a valid ID.'),
-  body('academicLevelId')
-    .notEmpty().withMessage('Academic level is required.')
-    .isInt().withMessage('Academic level must be a valid ID.'),
-  body('semesterId')
-    .notEmpty().withMessage('Semester is required.')
-    .isInt().withMessage('Semester must be a valid ID.')
+  body('departmentId').isInt({ min: 1 }).withMessage('Department is required.'),
+  body('academicLevelId').isInt({ min: 1 }).withMessage('Academic level is required.'),
+  body('semesterId').isInt({ min: 1 }).withMessage('Semester is required.'),
+  body('invitationCode')
+    .trim()
+    .notEmpty().withMessage('Invitation code is required.')
 ];
 
 const loginValidation = [
@@ -72,7 +73,12 @@ const refreshTokenValidation = [
 
 router.post(
   "/register",
-  uploadStudentId.single("universityIdCard"),
+  uploadStudentId.fields([
+    { name: 'profileImage', maxCount: 1 },
+    { name: 'universityIdCard', maxCount: 1 },
+  ]),
+  registerValidation,
+  validate,
   authController.register
 );
 

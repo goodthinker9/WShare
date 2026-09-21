@@ -10,24 +10,48 @@ class AuthService {
   /**
    * Register a new student
    */
-async register({ fullName, password, studentId, departmentId, academicLevelId, semesterId, universityIdCard }) {
-    // Validate department/academicLevel/semester if provided
-    if (departmentId) {
-      const [dept] = await pool.query('SELECT id FROM departments WHERE id = ? AND is_active = 1', [departmentId]);
-      if (dept.length === 0) {
-        throw new AppError('Invalid department selected.', 400, 'INVALID_DEPARTMENT');
-      }
+async register({ fullName, email, password, studentId, invitationCode, departmentId, academicLevelId, semesterId, profileImage }) {
+    const normalizedInvitationCode = String(invitationCode || '').trim().toUpperCase();
+    if (!normalizedInvitationCode) {
+      throw new AppError('Invitation code is required.', 400, 'INVITATION_REQUIRED');
     }
-    if (academicLevelId) {
-      const [lvl] = await pool.query('SELECT id FROM academic_levels WHERE id = ? AND is_active = 1', [academicLevelId]);
-      if (lvl.length === 0) {
-        throw new AppError('Invalid academic level selected.', 400, 'INVALID_LEVEL');
-      }
+    const [assignments] = await pool.query(
+      `SELECT d.id AS department_id, d.faculty_id, f.university_id,
+              al.id AS academic_level_id, s.id AS semester_id
+       FROM departments d
+       JOIN faculties f ON f.id = d.faculty_id AND f.is_active = 1
+       JOIN academic_levels al ON al.id = ? AND al.is_active = 1
+       JOIN semesters s ON s.id = ? AND s.is_active = 1
+       WHERE d.id = ? AND d.is_active = 1`,
+      [academicLevelId, semesterId, departmentId]
+    );
+    const assignment = assignments[0];
+    if (!assignment) {
+      throw new AppError('Invalid academic assignment.', 400, 'INVALID_ASSIGNMENT');
     }
-    if (semesterId) {
-      const [sem] = await pool.query('SELECT id FROM semesters WHERE id = ? AND is_active = 1', [semesterId]);
-      if (sem.length === 0) {
-        throw new AppError('Invalid semester selected.', 400, 'INVALID_SEMESTER');
+
+    let invitation = null;
+    if (normalizedInvitationCode) {
+      const [codes] = await pool.query(
+        `SELECT id, university_id, department_id, academic_level_id, semester_id,
+                max_uses, used_count, expires_at, is_active
+         FROM invitation_codes
+         WHERE code = ?`,
+        [normalizedInvitationCode]
+      );
+      invitation = codes[0];
+
+      if (!invitation || !invitation.is_active) {
+        throw new AppError('Invalid or disabled invitation code.', 400, 'INVALID_INVITATION');
+      }
+      if (invitation.expires_at && new Date(invitation.expires_at) <= new Date()) {
+        throw new AppError('Invitation code has expired.', 400, 'INVITATION_EXPIRED');
+      }
+      if (invitation.used_count >= invitation.max_uses) {
+        throw new AppError('Invitation code has reached its maximum uses.', 409, 'INVITATION_EXHAUSTED');
+      }
+      if (invitation.department_id !== assignment.department_id || invitation.academic_level_id !== assignment.academic_level_id || invitation.semester_id !== assignment.semester_id) {
+        throw new AppError('Invitation code does not match the selected academic assignment.', 400, 'INVITATION_ASSIGNMENT_MISMATCH');
       }
     }
 
@@ -46,13 +70,10 @@ async register({ fullName, password, studentId, departmentId, academicLevelId, s
       throw new AppError('Student ID already registered.', 409, 'STUDENT_ID_EXISTS');
     }
 
-    // Get Wollo University ID
-    const [university] = await pool.query(
-      'SELECT id FROM universities WHERE email_domain = ?',
-      ['wollo.edu.et']
-    );
-    if (university.length === 0) {
-      throw new AppError('University configuration not found.', 500, 'CONFIG_ERROR');
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const [existingEmail] = await pool.query('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    if (existingEmail.length > 0) {
+      throw new AppError('Email is already registered.', 409, 'EMAIL_EXISTS');
     }
 
     // Hash password
@@ -61,24 +82,41 @@ async register({ fullName, password, studentId, departmentId, academicLevelId, s
 
 // Create user
     const [result] = await pool.query(
-      `INSERT INTO users (full_name, password_hash, student_id, university_id_card, university_id,
-                          department_id, academic_level_id, semester_id,
-                          role, account_status, verification_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO users (full_name, email, password_hash, student_id, invitation_code, university_id_card, university_id,
+              faculty_id, department_id, academic_level_id, semester_id,
+              role, account_status, verification_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         fullName.trim(),
+        normalizedEmail,
         passwordHash,
         studentId,
-        universityIdCard,
-        university[0].id,
-        departmentId || null,
-        academicLevelId || null,
-        semesterId || null,
+        normalizedInvitationCode || null,
+        profileImage || null,
+        assignment.university_id,
+        assignment.faculty_id,
+        assignment.department_id,
+        assignment.academic_level_id,
+        assignment.semester_id,
         USER_ROLES.STUDENT,
         ACCOUNT_STATUS.PENDING,
         VERIFICATION_STATUS.PENDING
       ]
     );
+
+    if (invitation) {
+      const [usage] = await pool.query(
+        `UPDATE invitation_codes
+         SET used_count = used_count + 1
+         WHERE id = ? AND is_active = 1 AND used_count < max_uses
+           AND (expires_at IS NULL OR expires_at > NOW())`,
+        [invitation.id]
+      );
+      if (usage.affectedRows === 0) {
+        await pool.query('DELETE FROM users WHERE id = ?', [result.insertId]);
+        throw new AppError('Invitation code is no longer available.', 409, 'INVITATION_UNAVAILABLE');
+      }
+    }
 
     return {
       id: result.insertId,

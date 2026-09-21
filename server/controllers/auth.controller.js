@@ -3,25 +3,20 @@ const authService = require('../services/auth.service');
 class AuthController {
   async register(req, res, next) {
     try {
-      const { fullName, password, studentId, departmentId, academicLevelId, semesterId } = req.body;
-      const universityIdCard = req.file ? req.file.path : null;
-
-      if (!universityIdCard) {
-        return res.status(400).json({
-          success: false,
-          message: 'University ID card image is required.',
-          error: 'ID_CARD_REQUIRED'
-        });
-      }
+      const { fullName, email, password, studentId, invitationCode, departmentId, academicLevelId, semesterId } = req.body;
+      const uploadedFile = req.files?.profileImage?.[0] || req.files?.universityIdCard?.[0];
+      const profileImage = uploadedFile ? uploadedFile.path : null;
 
       const result = await authService.register({
         fullName,
+        email,
         password,
         studentId,
-        departmentId: departmentId || null,
-        academicLevelId: academicLevelId || null,
-        semesterId: semesterId || null,
-        universityIdCard
+        invitationCode,
+        departmentId,
+        academicLevelId,
+        semesterId,
+        profileImage
       });
 
       res.status(201).json({
@@ -38,10 +33,8 @@ class AuthController {
 
   async login(req, res, next) {
     try {
-      const { identifier, email, password } = req.body;
-      // Support both "identifier" (student ID) and legacy "email" field
-      const loginIdentifier = identifier || email;
-      const result = await authService.login({ identifier: loginIdentifier, password });
+      const { identifier, password } = req.body;
+      const result = await authService.login({ identifier, password });
 
       res.json({
         success: true,
