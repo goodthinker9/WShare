@@ -57,7 +57,7 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 mb-1">
-                Student ID
+                Student ID or Admin Email
               </label>
               <input
                 id="identifier"
@@ -69,7 +69,7 @@ export default function Login() {
                 required
                 autoComplete="username"
               />
-              <p className="mt-1 text-xs text-gray-400">Use your unique student ID (e.g., WOUR/0014/16)</p>
+              <p className="mt-1 text-xs text-gray-400">Students use their ID; administrators use their email.</p>
             </div>
 
             <div>

@@ -22,6 +22,7 @@ const courseRoutes = require('./routes/course.routes');
 const departmentRoutes = require('./routes/department.routes');
 const analyticsRoutes = require('./routes/analytics.routes');
 const adminRoutes = require('./routes/admin.routes');
+const invitationCodeRoutes = require('./routes/invitationCode.routes');
 
 const app = express();
 
@@ -92,6 +93,7 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/invitation-codes', invitationCodeRoutes);
 
 // ============================================================
 // Health Check

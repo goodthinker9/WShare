@@ -27,6 +27,7 @@ import AdminCourses from './pages/admin/Courses';
 import AdminReports from './pages/admin/Reports';
 import AdminAnalytics from './pages/admin/Analytics';
 import AdminSettings from './pages/admin/Settings';
+import AdminInvitationCodes from './pages/admin/InvitationCodes';
 
 function PrivateRoute({ children, role }) {
   const { user, isLoading } = useAuth();
@@ -83,6 +84,7 @@ export default function App() {
         <Route path="reports" element={<AdminReports />} />
         <Route path="analytics" element={<AdminAnalytics />} />
         <Route path="settings" element={<AdminSettings />} />
+        <Route path="invitation-codes" element={<AdminInvitationCodes />} />
       </Route>
 
       {/* 404 */}
