@@ -184,6 +184,16 @@ export const departmentAPI = {
 };
 
 // ============================================================
+// Invitation Codes API (Admin)
+// ============================================================
+export const invitationCodeAPI = {
+  getAll: () => api.get('/invitation-codes'),
+  create: (data) => api.post('/invitation-codes', data),
+  disable: (id) => api.put(`/invitation-codes/${id}/disable`),
+  delete: (id) => api.delete(`/invitation-codes/${id}`),
+};
+
+// ============================================================
 // Users API (Admin)
 // ============================================================
 export const userAPI = {
@@ -194,7 +204,7 @@ export const userAPI = {
   updateStatus: (id, data) => api.put(`/users/${id}/status`, data),
   updateAssignment: (id, data) => api.put(`/users/${id}/assign`, data),
 delete: (id) => api.delete(`/users/${id}`),
-  getIDCard: (id) => api.get(`/users/${id}/id-card`, { responseType: 'blob' }),
+  getIDCard: (id) => api.get(`/users/${id}/id-card`, { responseType: 'blob', _silent: true }),
 };
 
 // ============================================================
