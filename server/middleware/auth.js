@@ -55,14 +55,12 @@ const authorize = (...allowedRoles) => {
 };
 
 /**
- * Check if student account is verified and active.
+ * Check if student account is active.
  * Re-validates the student's current status directly from the database so that
  * stale JWT claims (e.g. a token minted before the student was rejected) cannot
  * be used to bypass verification. This enforces the business rule:
  *
- *   Pending  -> no academic resource access
- *   Approved -> active academic information + authorized resources
- *   Rejected -> no academic resource access
+ *   Active -> academic information + authorized resources
  */
 const requireVerifiedStudent = async (req, res, next) => {
   try {
@@ -86,11 +84,7 @@ const requireVerifiedStudent = async (req, res, next) => {
         return next(new AppError('Account is not active.', 403, 'ACCOUNT_INACTIVE'));
       }
 
-      if (user.verification_status !== 'approved') {
-        return next(new AppError('Account not verified.', 403, 'NOT_VERIFIED'));
-      }
-
-      // A verified/active student must have an approved academic assignment.
+      // An active student must have an invitation-assigned academic context.
       if (!user.department_id || !user.academic_level_id || !user.semester_id) {
         return next(new AppError('Academic assignment not complete. Contact admin.', 403, 'NOT_ASSIGNED'));
       }

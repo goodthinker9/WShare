@@ -80,12 +80,17 @@ class ResourceService {
       throw new AppError('User not found.', 404, 'USER_NOT_FOUND');
     }
 
-    const { department_id: departmentId, academic_level_id: academicLevelId } = user[0];
+    const { department_id: departmentId, academic_level_id: academicLevelId, semester_id: semesterId } = user[0];
     const { page: p, limit: l, offset } = getPagination(page, limit);
 
     // Build base conditions for the user's department
     let whereSql = ` WHERE r.department_id = ? AND r.status = ? AND r.is_active = 1`;
     const params = [departmentId, RESOURCE_STATUS.APPROVED];
+
+    if (semesterId) {
+      whereSql += ` AND r.semester_id = ?`;
+      params.push(semesterId);
+    }
 
     // If user has a specific academic level, show resources for their level and below
     if (academicLevelId) {
