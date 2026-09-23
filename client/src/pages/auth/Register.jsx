@@ -44,10 +44,6 @@ export default function Register() {
       toast.error('Full name is required.');
       return false;
     }
-    if (!formData.email.trim()) {
-      toast.error('Email is required.');
-      return false;
-    }
     if (formData.password.length < 8) {
       toast.error('Password must be at least 8 characters.');
       return false;
@@ -78,7 +74,7 @@ export default function Register() {
     setIsLoading(true);
     const fd = new FormData();
     fd.append('fullName', formData.fullName);
-    fd.append('email', formData.email.trim().toLowerCase());
+    if (formData.email.trim()) fd.append('email', formData.email.trim().toLowerCase());
     fd.append('password', formData.password);
     fd.append('confirmPassword', formData.confirmPassword);
     fd.append('studentId', formData.studentId);
@@ -148,8 +144,8 @@ export default function Register() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label htmlFor="email" className={labelClass}>University Email</label>
-                <input id="email" name="email" type="email" value={formData.email} onChange={handleChange} className={inputClass} placeholder="student@wollo.edu.et" required />
+                <label htmlFor="email" className={labelClass}>University Email (Optional)</label>
+                <input id="email" name="email" type="email" value={formData.email} onChange={handleChange} className={inputClass} placeholder="student@wollo.edu.et" />
               </div>
               <div>
                 <label htmlFor="password" className={labelClass}>

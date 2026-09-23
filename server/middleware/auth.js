@@ -66,8 +66,8 @@ const requireVerifiedStudent = async (req, res, next) => {
   try {
     if (req.user.role === 'student') {
       // Fetch fresh status + assignment from the DB to avoid stale-token bypass.
-      const [rows] = await pool.query(
-        'SELECT account_status, verification_status, department_id, academic_level_id, semester_id FROM users WHERE id = ?',
+      const { rows } = await pool.query(
+        'SELECT account_status, verification_status, department_id, academic_level_id, semester_id FROM users WHERE id = $1',
         [req.user.id]
       );
 

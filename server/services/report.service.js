@@ -7,8 +7,8 @@ class ReportService {
    * Report a resource
    */
   async createReport(reporterId, { resourceId, reason, description }) {
-    const [resources] = await pool.query(
-      'SELECT id FROM resources WHERE id = ? AND is_active = 1',
+    const { rows: resources } = await pool.query(
+      'SELECT id FROM resources WHERE id = $1 AND is_active = TRUE',
       [resourceId]
     );
 
@@ -17,8 +17,8 @@ class ReportService {
     }
 
     // Check if user already reported this resource
-    const [existing] = await pool.query(
-      'SELECT id FROM reports WHERE reporter_id = ? AND resource_id = ? AND status = ?',
+    const { rows: existing } = await pool.query(
+      'SELECT id FROM reports WHERE reporter_id = $1 AND resource_id = $2 AND status = $3',
       [reporterId, resourceId, 'pending']
     );
 
@@ -27,7 +27,7 @@ class ReportService {
     }
 
     await pool.query(
-      'INSERT INTO reports (reporter_id, resource_id, reason, description) VALUES (?, ?, ?, ?)',
+      'INSERT INTO reports (reporter_id, resource_id, reason, description) VALUES ($1, $2, $3, $4)',
       [reporterId, resourceId, reason, description || null]
     );
 
@@ -52,20 +52,20 @@ class ReportService {
     const params = [];
 
     if (status) {
-      sql += ` AND rp.status = ?`;
+      sql += ` AND rp.status = $${params.length + 1}`;
       params.push(status);
     }
 
     const countSql = sql;
-    const [countResult] = await pool.query(
+    const { rows: countResult } = await pool.query(
       `SELECT COUNT(*) as total FROM (${countSql}) as sub`,
       params
     );
 
-    sql += ` ORDER BY rp.created_at DESC LIMIT ? OFFSET ?`;
+    sql += ` ORDER BY rp.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(l, offset);
 
-    const [reports] = await pool.query(sql, params);
+    const { rows: reports } = await pool.query(sql, params);
 
     return paginatedResponse(reports, countResult[0].total, p, l);
   }
@@ -74,8 +74,8 @@ class ReportService {
    * Resolve a report (admin)
    */
   async resolveReport(reportId, adminId, { status, adminNotes }) {
-    const [reports] = await pool.query(
-      'SELECT id FROM reports WHERE id = ?',
+    const { rows: reports } = await pool.query(
+      'SELECT id FROM reports WHERE id = $1',
       [reportId]
     );
 
@@ -84,19 +84,19 @@ class ReportService {
     }
 
     await pool.query(
-      'UPDATE reports SET status = ?, resolved_by = ?, resolved_at = NOW(), admin_notes = ? WHERE id = ?',
+      'UPDATE reports SET status = $1, resolved_by = $2, resolved_at = NOW(), admin_notes = $3 WHERE id = $4',
       [status, adminId, adminNotes || null, reportId]
     );
 
     // Notify the reporter
-    const [report] = await pool.query(
-      'SELECT reporter_id FROM reports WHERE id = ?',
+    const { rows: report } = await pool.query(
+      'SELECT reporter_id FROM reports WHERE id = $1',
       [reportId]
     );
 
     await pool.query(
-      `INSERT INTO notifications (user_id, type, title, message, reference_type, reference_id)
-       VALUES (?, 'report_resolved', 'Report Resolved', ?, 'report', ?)`,
+          `INSERT INTO notifications (user_id, type, title, message, reference_type, reference_id)
+           VALUES ($1, 'report_resolved', 'Report Resolved', $2, 'report', $3)`
       [report[0].reporter_id, `Your report has been ${status}. Admin notes: ${adminNotes || 'None'}`, reportId]
     );
 

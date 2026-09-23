@@ -8,8 +8,8 @@ class BookmarkService {
    */
   async toggle(userId, resourceId) {
     // Check if resource exists and is approved
-    const [resources] = await pool.query(
-      'SELECT id FROM resources WHERE id = ? AND status = ? AND is_active = 1',
+    const { rows: resources } = await pool.query(
+      'SELECT id FROM resources WHERE id = $1 AND status = $2 AND is_active = TRUE',
       [resourceId, 'approved']
     );
 
@@ -18,22 +18,22 @@ class BookmarkService {
     }
 
     // Check if already bookmarked
-    const [existing] = await pool.query(
-      'SELECT id FROM bookmarks WHERE user_id = ? AND resource_id = ?',
+    const { rows: existing } = await pool.query(
+      'SELECT id FROM bookmarks WHERE user_id = $1 AND resource_id = $2',
       [userId, resourceId]
     );
 
     if (existing.length > 0) {
       // Remove bookmark
       await pool.query(
-        'DELETE FROM bookmarks WHERE user_id = ? AND resource_id = ?',
+        'DELETE FROM bookmarks WHERE user_id = $1 AND resource_id = $2',
         [userId, resourceId]
       );
       return { bookmarked: false, message: 'Bookmark removed.' };
     } else {
       // Add bookmark
       await pool.query(
-        'INSERT INTO bookmarks (user_id, resource_id) VALUES (?, ?)',
+        'INSERT INTO bookmarks (user_id, resource_id) VALUES ($1, $2)',
         [userId, resourceId]
       );
       return { bookmarked: true, message: 'Bookmark added.' };
@@ -46,12 +46,12 @@ class BookmarkService {
   async getUserBookmarks(userId, { page, limit }) {
     const { p, l, offset } = getPagination(page, limit);
 
-    const [countResult] = await pool.query(
-      `SELECT COUNT(*) as total FROM bookmarks WHERE user_id = ?`,
+    const { rows: countResult } = await pool.query(
+      `SELECT COUNT(*) as total FROM bookmarks WHERE user_id = $1`,
       [userId]
     );
 
-    const [bookmarks] = await pool.query(
+    const { rows: bookmarks } = await pool.query(
       `SELECT b.id, b.created_at AS bookmarked_at,
               r.id AS resource_id, r.title, r.description, r.file_extension, r.file_size,
               r.download_count, r.created_at,
@@ -67,10 +67,10 @@ class BookmarkService {
        JOIN academic_levels al ON r.academic_level_id = al.id
        JOIN semesters s ON r.semester_id = s.id
        LEFT JOIN ratings rt ON r.id = rt.resource_id
-       WHERE b.user_id = ?
+      WHERE b.user_id = $1
        GROUP BY b.id
        ORDER BY b.created_at DESC
-       LIMIT ? OFFSET ?`,
+      LIMIT $2 OFFSET $3`,
       [userId, l, offset]
     );
 

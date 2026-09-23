@@ -7,8 +7,8 @@ class DownloadService {
    * Record a download
    */
   async recordDownload(userId, resourceId) {
-    const [resources] = await pool.query(
-      'SELECT id, file_path, original_file_name FROM resources WHERE id = ? AND status = ? AND is_active = 1',
+    const { rows: resources } = await pool.query(
+      'SELECT id, file_path, original_file_name FROM resources WHERE id = $1 AND status = $2 AND is_active = TRUE',
       [resourceId, 'approved']
     );
 
@@ -18,13 +18,13 @@ class DownloadService {
 
     // Record download
     await pool.query(
-      'INSERT INTO downloads (user_id, resource_id) VALUES (?, ?)',
+      'INSERT INTO downloads (user_id, resource_id) VALUES ($1, $2)',
       [userId, resourceId]
     );
 
     // Increment download count
     await pool.query(
-      'UPDATE resources SET download_count = download_count + 1 WHERE id = ?',
+      'UPDATE resources SET download_count = download_count + 1 WHERE id = $1',
       [resourceId]
     );
 
@@ -41,21 +41,21 @@ class DownloadService {
   async getDownloadHistory(userId, { page, limit }) {
     const { p, l, offset } = getPagination(page, limit);
 
-    const [countResult] = await pool.query(
-      `SELECT COUNT(*) as total FROM downloads WHERE user_id = ?`,
+    const { rows: countResult } = await pool.query(
+      `SELECT COUNT(*) as total FROM downloads WHERE user_id = $1`,
       [userId]
     );
 
-    const [downloads] = await pool.query(
+    const { rows: downloads } = await pool.query(
       `SELECT d.id, d.downloaded_at,
               r.id AS resource_id, r.title, r.file_extension, r.file_size, r.download_count,
               u.full_name AS uploader_name
        FROM downloads d
        JOIN resources r ON d.resource_id = r.id
        JOIN users u ON r.uploader_id = u.id
-       WHERE d.user_id = ?
+      WHERE d.user_id = $1
        ORDER BY d.downloaded_at DESC
-       LIMIT ? OFFSET ?`,
+      LIMIT $2 OFFSET $3`,
       [userId, l, offset]
     );
 
@@ -66,8 +66,8 @@ class DownloadService {
    * Get total download count for a resource
    */
   async getDownloadCount(resourceId) {
-    const [result] = await pool.query(
-      'SELECT download_count FROM resources WHERE id = ?',
+    const { rows: result } = await pool.query(
+      'SELECT download_count FROM resources WHERE id = $1',
       [resourceId]
     );
 

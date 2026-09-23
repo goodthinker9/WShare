@@ -13,8 +13,9 @@ const registerValidation = [
     .notEmpty().withMessage('Full name is required.')
     .isLength({ min: 2, max: 255 }).withMessage('Full name must be 2-255 characters.'),
   body('email')
+    .optional({ values: 'falsy' })
     .trim()
-    .isEmail().withMessage('A valid email is required.')
+    .isEmail().withMessage('A valid email is required when provided.')
     .normalizeEmail(),
   body('password')
     .notEmpty().withMessage('Password is required.')

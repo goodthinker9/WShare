@@ -7,8 +7,8 @@ class RatingService {
    */
   async rateResource(userId, resourceId, { rating, review }) {
     // Check if resource exists and is approved
-    const [resources] = await pool.query(
-      'SELECT id, uploader_id FROM resources WHERE id = ? AND status = ? AND is_active = 1',
+    const { rows: resources } = await pool.query(
+      'SELECT id, uploader_id FROM resources WHERE id = $1 AND status = $2 AND is_active = TRUE',
       [resourceId, 'approved']
     );
 
@@ -22,22 +22,22 @@ class RatingService {
     }
 
     // Check if user has already rated
-    const [existing] = await pool.query(
-      'SELECT id FROM ratings WHERE user_id = ? AND resource_id = ?',
+    const { rows: existing } = await pool.query(
+      'SELECT id FROM ratings WHERE user_id = $1 AND resource_id = $2',
       [userId, resourceId]
     );
 
     if (existing.length > 0) {
       // Update existing rating
       await pool.query(
-        'UPDATE ratings SET rating = ?, review = ?, is_edited = 1, updated_at = NOW() WHERE id = ?',
+        'UPDATE ratings SET rating = $1, review = $2, is_edited = TRUE, updated_at = NOW() WHERE id = $3',
         [rating, review || null, existing[0].id]
       );
       return { message: 'Rating updated successfully.' };
     } else {
       // Create new rating
       await pool.query(
-        'INSERT INTO ratings (user_id, resource_id, rating, review) VALUES (?, ?, ?, ?)',
+        'INSERT INTO ratings (user_id, resource_id, rating, review) VALUES ($1, $2, $3, $4)',
         [userId, resourceId, rating, review || null]
       );
       return { message: 'Rating submitted successfully.' };
@@ -48,19 +48,19 @@ class RatingService {
    * Get ratings for a resource
    */
   async getResourceRatings(resourceId) {
-    const [ratings] = await pool.query(
+    const { rows: ratings } = await pool.query(
       `SELECT r.id, r.rating, r.review, r.created_at, r.updated_at,
               u.id AS user_id, u.full_name, u.profile_image
        FROM ratings r
        JOIN users u ON r.user_id = u.id
-       WHERE r.resource_id = ?
+      WHERE r.resource_id = $1
        ORDER BY r.created_at DESC`,
       [resourceId]
     );
 
     // Calculate average
-    const [avgResult] = await pool.query(
-      'SELECT AVG(rating) as average_rating, COUNT(*) as total_ratings FROM ratings WHERE resource_id = ?',
+    const { rows: avgResult } = await pool.query(
+      'SELECT AVG(rating) as average_rating, COUNT(*) as total_ratings FROM ratings WHERE resource_id = $1',
       [resourceId]
     );
 
@@ -75,8 +75,8 @@ class RatingService {
    * Delete a rating
    */
   async deleteRating(userId, ratingId) {
-    const [ratings] = await pool.query(
-      'SELECT id FROM ratings WHERE id = ? AND user_id = ?',
+    const { rows: ratings } = await pool.query(
+      'SELECT id FROM ratings WHERE id = $1 AND user_id = $2',
       [ratingId, userId]
     );
 
@@ -84,7 +84,7 @@ class RatingService {
       throw new AppError('Rating not found.', 404, 'RATING_NOT_FOUND');
     }
 
-    await pool.query('DELETE FROM ratings WHERE id = ?', [ratingId]);
+    await pool.query('DELETE FROM ratings WHERE id = $1', [ratingId]);
     return { message: 'Rating deleted successfully.' };
   }
 }

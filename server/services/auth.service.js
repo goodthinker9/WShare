@@ -15,14 +15,14 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
     if (!normalizedInvitationCode) {
       throw new AppError('Invitation code is required.', 400, 'INVITATION_REQUIRED');
     }
-    const [assignments] = await pool.query(
+    const { rows: assignments } = await pool.query(
       `SELECT d.id AS department_id, d.faculty_id, f.university_id,
               al.id AS academic_level_id, s.id AS semester_id
        FROM departments d
-       JOIN faculties f ON f.id = d.faculty_id AND f.is_active = 1
-       JOIN academic_levels al ON al.id = ? AND al.is_active = 1
-       JOIN semesters s ON s.id = ? AND s.is_active = 1
-       WHERE d.id = ? AND d.is_active = 1`,
+      JOIN faculties f ON f.id = d.faculty_id AND f.is_active = TRUE
+      JOIN academic_levels al ON al.id = $1 AND al.is_active = TRUE
+      JOIN semesters s ON s.id = $2 AND s.is_active = TRUE
+      WHERE d.id = $3 AND d.is_active = TRUE`,
       [academicLevelId, semesterId, departmentId]
     );
     const assignment = assignments[0];
@@ -32,11 +32,11 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
 
     let invitation = null;
     if (normalizedInvitationCode) {
-      const [codes] = await pool.query(
+      const { rows: codes } = await pool.query(
         `SELECT id, university_id, department_id, academic_level_id, semester_id,
                 max_uses, used_count, expires_at, is_active
          FROM invitation_codes
-         WHERE code = ?`,
+         WHERE code = $1`,
         [normalizedInvitationCode]
       );
       invitation = codes[0];
@@ -62,18 +62,20 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
     }
 
     // Check if student ID already exists
-    const [existingStudentId] = await pool.query(
-      'SELECT id FROM users WHERE student_id = ?',
+    const { rows: existingStudentId } = await pool.query(
+      'SELECT id FROM users WHERE student_id = $1',
       [studentId]
     );
     if (existingStudentId.length > 0) {
       throw new AppError('Student ID already registered.', 409, 'STUDENT_ID_EXISTS');
     }
 
-    const normalizedEmail = String(email || '').trim().toLowerCase();
-    const [existingEmail] = await pool.query('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
-    if (existingEmail.length > 0) {
-      throw new AppError('Email is already registered.', 409, 'EMAIL_EXISTS');
+    const normalizedEmail = String(email || '').trim().toLowerCase() || null;
+    if (normalizedEmail) {
+      const { rows: existingEmail } = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
+      if (existingEmail.length > 0) {
+        throw new AppError('Email is already registered.', 409, 'EMAIL_EXISTS');
+      }
     }
 
     // Hash password
@@ -81,11 +83,12 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
     const passwordHash = await bcrypt.hash(password, salt);
 
 // Create user
-    const [result] = await pool.query(
+    const { rows: result } = await pool.query(
       `INSERT INTO users (full_name, email, password_hash, student_id, invitation_code, university_id_card, university_id,
               faculty_id, department_id, academic_level_id, semester_id,
               role, account_status, verification_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING id`,
       [
         fullName.trim(),
         normalizedEmail,
@@ -105,21 +108,21 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
     );
 
     if (invitation) {
-      const [usage] = await pool.query(
+      const usage = await pool.query(
         `UPDATE invitation_codes
          SET used_count = used_count + 1
-         WHERE id = ? AND is_active = 1 AND used_count < max_uses
+         WHERE id = $1 AND is_active = TRUE AND used_count < max_uses
            AND (expires_at IS NULL OR expires_at > NOW())`,
         [invitation.id]
       );
-      if (usage.affectedRows === 0) {
-        await pool.query('DELETE FROM users WHERE id = ?', [result.insertId]);
+      if (usage.rowCount === 0) {
+        await pool.query('DELETE FROM users WHERE id = $1', [result[0].id]);
         throw new AppError('Invitation code is no longer available.', 409, 'INVITATION_UNAVAILABLE');
       }
     }
 
     return {
-      id: result.insertId,
+      id: result[0].id,
       message: 'Registration successful. Please wait for admin verification.'
     };
   }
@@ -134,13 +137,13 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
       throw new AppError('Student ID or email is required.', 400, 'IDENTIFIER_REQUIRED');
     }
 
-    const [users] = await pool.query(
-      `SELECT id, full_name, email, password_hash, role, account_status, verification_status,
-              rejection_reason, department_id, academic_level_id, semester_id, university_id, student_id
-       FROM users
-       WHERE student_id = ? OR email = ?`,
-      [identifierStr, identifierStr.toLowerCase()]
-    );
+const { rows: users } = await pool.query(
+  `SELECT id, full_name, email, password_hash, role, account_status, verification_status,
+          rejection_reason, department_id, academic_level_id, semester_id, university_id, student_id
+   FROM users
+   WHERE student_id = $1 OR email = $2`,
+  [identifierStr, identifierStr.toLowerCase()]
+);
 
     if (users.length === 0) {
       throw new AppError('Invalid Student ID or password.', 401, 'INVALID_CREDENTIALS');
@@ -190,11 +193,13 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
     });
 
     // Store refresh token
-    await pool.query(
-      'UPDATE users SET refresh_token = ?, last_login_at = NOW() WHERE id = ?',
-      [refreshToken, user.id]
-    );
-
+   await pool.query(
+  `UPDATE users
+   SET refresh_token = $1,
+       last_login_at = NOW()
+   WHERE id = $2`,
+  [refreshToken, user.id]
+);
     return {
       accessToken,
       refreshToken,
@@ -220,10 +225,10 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
     try {
       const decoded = jwt.verify(refreshToken, config.jwt.refreshSecret);
       
-      const [users] = await pool.query(
+      const { rows: users } = await pool.query(
         `SELECT id, email, role, student_id, department_id, academic_level_id,
                 semester_id, account_status, verification_status
-         FROM users WHERE id = ? AND refresh_token = ?`,
+         FROM users WHERE id = $1 AND refresh_token = $2`,
         [decoded.id, refreshToken]
       );
 
@@ -259,7 +264,7 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
    * Get current user profile
    */
   async getProfile(userId) {
-    const [users] = await pool.query(
+    const { rows: users } = await pool.query(
       `SELECT u.id, u.full_name, u.email, u.student_id, u.role, 
               u.account_status, u.verification_status, u.rejection_reason,
               u.profile_image, u.university_id_card,
@@ -276,7 +281,7 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
        LEFT JOIN semesters s ON u.semester_id = s.id
        LEFT JOIN universities un ON u.university_id = un.id
        LEFT JOIN faculties f ON u.faculty_id = f.id
-       WHERE u.id = ?`,
+       WHERE u.id = $1`,
       [userId]
     );
 
@@ -291,8 +296,8 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
    * Change password
    */
   async changePassword(userId, currentPassword, newPassword) {
-    const [users] = await pool.query(
-      'SELECT id, password_hash FROM users WHERE id = ?',
+    const { rows: users } = await pool.query(
+      'SELECT id, password_hash FROM users WHERE id = $1',
       [userId]
     );
 
@@ -309,7 +314,7 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
     const passwordHash = await bcrypt.hash(newPassword, salt);
 
     await pool.query(
-      'UPDATE users SET password_hash = ?, password_changed_at = NOW() WHERE id = ?',
+      'UPDATE users SET password_hash = $1, password_changed_at = NOW() WHERE id = $2',
       [passwordHash, userId]
     );
 
@@ -321,7 +326,7 @@ async register({ fullName, email, password, studentId, invitationCode, departmen
    */
   async logout(userId) {
     await pool.query(
-      'UPDATE users SET refresh_token = NULL WHERE id = ?',
+      'UPDATE users SET refresh_token = NULL WHERE id = $1',
       [userId]
     );
     return { message: 'Logged out successfully.' };

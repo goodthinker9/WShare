@@ -6,17 +6,17 @@ class NotificationController {
     try {
       const { p, l, offset } = getPagination(req.query.page, req.query.limit);
 
-      const [countResult] = await pool.query(
-        'SELECT COUNT(*) as total FROM notifications WHERE user_id = ?',
+      const { rows: countResult } = await pool.query(
+        'SELECT COUNT(*) as total FROM notifications WHERE user_id = $1',
         [req.user.id]
       );
 
-      const [notifications] = await pool.query(
+      const { rows: notifications } = await pool.query(
         `SELECT id, type, title, message, reference_type, reference_id, is_read, created_at
          FROM notifications
-         WHERE user_id = ?
+         WHERE user_id = $1
          ORDER BY created_at DESC
-         LIMIT ? OFFSET ?`,
+         LIMIT $2 OFFSET $3`,
         [req.user.id, l, offset]
       );
 
@@ -28,8 +28,8 @@ class NotificationController {
 
   async getUnreadCount(req, res, next) {
     try {
-      const [result] = await pool.query(
-        'SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0',
+      const { rows: result } = await pool.query(
+        'SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND is_read = FALSE',
         [req.user.id]
       );
 
@@ -45,7 +45,7 @@ class NotificationController {
   async markAsRead(req, res, next) {
     try {
       await pool.query(
-        'UPDATE notifications SET is_read = 1, read_at = NOW() WHERE id = ? AND user_id = ?',
+        'UPDATE notifications SET is_read = TRUE, read_at = NOW() WHERE id = $1 AND user_id = $2',
         [req.params.id, req.user.id]
       );
 
@@ -61,7 +61,7 @@ class NotificationController {
   async markAllAsRead(req, res, next) {
     try {
       await pool.query(
-        'UPDATE notifications SET is_read = 1, read_at = NOW() WHERE user_id = ? AND is_read = 0',
+        'UPDATE notifications SET is_read = TRUE, read_at = NOW() WHERE user_id = $1 AND is_read = FALSE',
         [req.user.id]
       );
 

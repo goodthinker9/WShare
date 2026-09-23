@@ -55,13 +55,14 @@ async function main() {
   const email = `test${uniqueId}@wollo.edu.et`;
   const salt = await bcrypt.genSalt(12);
   const hash = await bcrypt.hash('Test@12345', salt);
-  const [ins] = await pool.query(
+  const { rows: ins } = await pool.query(
     `INSERT INTO users (full_name, email, password_hash, student_id, university_id,
        department_id, academic_level_id, semester_id, role, account_status, verification_status)
-     VALUES ('Test Student', ?, ?, ?, 1, 2, 5, 1, 'student', 'pending', 'pending')`,
+    VALUES ('Test Student', $1, $2, $3, 1, 2, 5, 1, 'student', 'pending', 'pending')
+    RETURNING id`,
     [email, hash, studentId]
   );
-  const studentUserId = ins.insertId;
+  const studentUserId = ins[0].id;
   check('Test student created in DB', !!studentUserId);
 
   // 3. Pending student cannot login
@@ -148,7 +149,7 @@ async function main() {
   check('No token blocked from dashboard (401)', noToken.status === 401, `got ${noToken.status}`);
 
   // Cleanup test user
-  await pool.query('DELETE FROM users WHERE id = ?', [studentUserId]);
+  await pool.query('DELETE FROM users WHERE id = $1', [studentUserId]);
 
   console.log(`=== RESULTS: ${passed} passed, ${failed} failed ===`);
   process.exit(failed ? 1 : 0);

@@ -39,7 +39,9 @@ export default function Login() {
             </div>
             <span className="text-2xl font-bold text-gray-900">WolloShare</span>
           </Link>
-          <p className="mt-2 text-gray-500">Sign in to your account</p>
+          <p className="mt-2 text-gray-500">
+            {roleHint === 'admin' ? 'Sign in to the administration panel' : 'Sign in to your student account'}
+          </p>
           {roleHint === 'admin' && (
             <p className="mt-1 text-xs font-medium text-gray-400 bg-gray-100 inline-block px-3 py-1 rounded-full">
               Admin Login
@@ -57,7 +59,7 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 mb-1">
-                Student ID or Admin Email
+                {roleHint === 'admin' ? 'Admin Email' : 'Student ID'}
               </label>
               <input
                 id="identifier"
@@ -65,11 +67,13 @@ export default function Login() {
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 className="input-field"
-                placeholder="WOUR/0014/16"
+                placeholder={roleHint === 'admin' ? 'admin@wollo.edu.et' : 'WOUR/0014/16'}
                 required
                 autoComplete="username"
               />
-              <p className="mt-1 text-xs text-gray-400">Students use their ID; administrators use their email.</p>
+              <p className="mt-1 text-xs text-gray-400">
+                {roleHint === 'admin' ? 'Use your administrator email address.' : 'Use the Student ID registered with your account.'}
+              </p>
             </div>
 
             <div>

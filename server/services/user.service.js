@@ -26,51 +26,51 @@ class UserService {
     const countParams = [];
 
     if (search) {
-      sql += ` AND (u.full_name LIKE ? OR u.email LIKE ? OR u.student_id LIKE ?)`;
+      sql += ` AND (u.full_name ILIKE $${params.length + 1} OR u.email ILIKE $${params.length + 2} OR u.student_id ILIKE $${params.length + 3})`;
       const searchPattern = `%${search}%`;
       params.push(searchPattern, searchPattern, searchPattern);
       countParams.push(searchPattern, searchPattern, searchPattern);
     }
 
     if (role) {
-      sql += ` AND u.role = ?`;
+      sql += ` AND u.role = $${params.length + 1}`;
       params.push(role);
       countParams.push(role);
     }
 
     if (status) {
-      sql += ` AND u.account_status = ?`;
+      sql += ` AND u.account_status = $${params.length + 1}`;
       params.push(status);
       countParams.push(status);
     }
 
     if (verification) {
-      sql += ` AND u.verification_status = ?`;
+      sql += ` AND u.verification_status = $${params.length + 1}`;
       params.push(verification);
       countParams.push(verification);
     }
 
     if (departmentId) {
-      sql += ` AND u.department_id = ?`;
+      sql += ` AND u.department_id = $${params.length + 1}`;
       params.push(departmentId);
       countParams.push(departmentId);
     }
 
     // Count
     const countSql = `SELECT COUNT(*) as total FROM users u LEFT JOIN departments d ON u.department_id = d.id WHERE 1=1` +
-      (search ? ` AND (u.full_name LIKE ? OR u.email LIKE ? OR u.student_id LIKE ?)` : '') +
-      (role ? ` AND u.role = ?` : '') +
-      (status ? ` AND u.account_status = ?` : '') +
-      (verification ? ` AND u.verification_status = ?` : '') +
-      (departmentId ? ` AND u.department_id = ?` : '');
+      (search ? ` AND (u.full_name ILIKE $1 OR u.email ILIKE $2 OR u.student_id ILIKE $3)` : '') +
+      (role ? ` AND u.role = $${search ? 4 : 1}` : '') +
+      (status ? ` AND u.account_status = $${(search ? 3 : 0) + (role ? 1 : 0) + 1}` : '') +
+      (verification ? ` AND u.verification_status = $${(search ? 3 : 0) + (role ? 1 : 0) + (status ? 1 : 0) + 1}` : '') +
+      (departmentId ? ` AND u.department_id = $${(search ? 3 : 0) + (role ? 1 : 0) + (status ? 1 : 0) + (verification ? 1 : 0) + 1}` : '');
 
-    const [countResult] = await pool.query(countSql, countParams);
+    const { rows: countResult } = await pool.query(countSql, countParams);
     const total = countResult[0].total;
 
-    sql += ` ORDER BY u.created_at DESC LIMIT ? OFFSET ?`;
+    sql += ` ORDER BY u.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(l, offset);
 
-    const [users] = await pool.query(sql, params);
+    const { rows: users } = await pool.query(sql, params);
 
     return paginatedResponse(users, total, p, l);
   }
@@ -79,7 +79,7 @@ class UserService {
    * Get single user details
    */
   async getById(userId) {
-    const [users] = await pool.query(
+    const { rows: users } = await pool.query(
       `SELECT u.*, d.name AS department_name, al.name AS academic_level_name,
               s.name AS semester_name, un.name AS university_name, f.name AS faculty_name
        FROM users u
@@ -88,7 +88,7 @@ class UserService {
        LEFT JOIN semesters s ON u.semester_id = s.id
        LEFT JOIN universities un ON u.university_id = un.id
        LEFT JOIN faculties f ON u.faculty_id = f.id
-       WHERE u.id = ?`,
+      WHERE u.id = $1`,
       [userId]
     );
 
@@ -103,8 +103,8 @@ class UserService {
    * Verify (approve/reject) a student
    */
 async verifyStudent(userId, adminId, { action, reason, departmentId, academicLevelId, semesterId, facultyId }) {
-    const [users] = await pool.query(
-      'SELECT id, role, verification_status, department_id, academic_level_id, semester_id, faculty_id FROM users WHERE id = ?',
+    const { rows: users } = await pool.query(
+      'SELECT id, role, verification_status, department_id, academic_level_id, semester_id, faculty_id FROM users WHERE id = $1',
       [userId]
     );
 
@@ -125,17 +125,17 @@ async verifyStudent(userId, adminId, { action, reason, departmentId, academicLev
       const finalFaculty = facultyId || users[0].faculty_id;
 
       await pool.query(
-        `UPDATE users SET verification_status = ?, account_status = ?, verified_by = ?, verified_at = NOW(),
-                department_id = ?, academic_level_id = ?, semester_id = ?, faculty_id = ?,
+        `UPDATE users SET verification_status = $1, account_status = $2, verified_by = $3, verified_at = NOW(),
+          department_id = $4, academic_level_id = $5, semester_id = $6, faculty_id = $7,
                 rejection_reason = NULL
-         WHERE id = ?`,
+         WHERE id = $8`,
         [VERIFICATION_STATUS.APPROVED, ACCOUNT_STATUS.ACTIVE, adminId, finalDept, finalLevel, finalSemester, finalFaculty || null, userId]
       );
 
       // Create notification
       await pool.query(
         `INSERT INTO notifications (user_id, type, title, message)
-         VALUES (?, 'verification_approved', 'Verification Approved', 'Your account has been verified. You can now login and access resources.')`,
+         VALUES ($1, 'verification_approved', 'Verification Approved', 'Your account has been verified. You can now login and access resources.')`,
         [userId]
       );
 } else if (action === VERIFICATION_ACTIONS.REJECTED) {
@@ -151,15 +151,15 @@ async verifyStudent(userId, adminId, { action, reason, departmentId, academicLev
       // login restriction. The verification record (student_verifications) and
       // rejection_reason are preserved for audit/history.
       await pool.query(
-        `UPDATE users SET verification_status = ?, account_status = ?, verified_by = ?, verified_at = NOW(),
-                rejection_reason = ?
-         WHERE id = ?`,
+        `UPDATE users SET verification_status = $1, account_status = $2, verified_by = $3, verified_at = NOW(),
+          rejection_reason = $4
+         WHERE id = $5`,
         [VERIFICATION_STATUS.REJECTED, ACCOUNT_STATUS.PENDING, adminId, reason, userId]
       );
 
       await pool.query(
         `INSERT INTO notifications (user_id, type, title, message, reference_type, reference_id)
-         VALUES (?, 'verification_rejected', 'Verification Rejected', ?, 'verification', ?)`,
+         VALUES ($1, 'verification_rejected', 'Verification Rejected', $2, 'verification', $3)`,
         [userId, `Your account verification was rejected. Reason: ${reason}`, userId]
       );
     }
@@ -167,14 +167,14 @@ async verifyStudent(userId, adminId, { action, reason, departmentId, academicLev
     // Log to student_verifications
     await pool.query(
       `INSERT INTO student_verifications (user_id, admin_id, action, reason)
-       VALUES (?, ?, ?, ?)`,
+      VALUES ($1, $2, $3, $4)`,
       [userId, adminId, action, reason]
     );
 
     // Log to audit
     await pool.query(
       `INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, description)
-       VALUES (?, ?, 'user', ?, ?)`,
+      VALUES ($1, $2, 'user', $3, $4)`,
       [adminId, `student_${action}`, userId, `Student ${action}: ${users[0].id}`]
     );
 
@@ -187,8 +187,8 @@ async verifyStudent(userId, adminId, { action, reason, departmentId, academicLev
    * Update user status (suspend, activate, disable)
    */
   async updateStatus(userId, adminId, { status, reason }) {
-    const [users] = await pool.query(
-      'SELECT id, account_status FROM users WHERE id = ?',
+    const { rows: users } = await pool.query(
+      'SELECT id, account_status FROM users WHERE id = $1',
       [userId]
     );
 
@@ -202,7 +202,7 @@ async verifyStudent(userId, adminId, { action, reason, departmentId, academicLev
     }
 
     await pool.query(
-      'UPDATE users SET account_status = ? WHERE id = ?',
+      'UPDATE users SET account_status = $1 WHERE id = $2',
       [status, userId]
     );
 
@@ -215,7 +215,7 @@ async verifyStudent(userId, adminId, { action, reason, departmentId, academicLev
 
     await pool.query(
       `INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, description)
-       VALUES (?, ?, 'user', ?, ?)`,
+      VALUES ($1, $2, 'user', $3, $4)`,
       [adminId, `user_${actionMap[status]}`, userId, reason || `User ${actionMap[status]}`]
     );
 
@@ -228,7 +228,7 @@ async verifyStudent(userId, adminId, { action, reason, departmentId, academicLev
 
     await pool.query(
       `INSERT INTO notifications (user_id, type, title, message)
-       VALUES (?, 'system', ?, ?)`,
+      VALUES ($1, 'system', $2, $3)`,
       [userId, titleMap[status], reason || `Your account has been ${actionMap[status]}.`]
     );
 
@@ -239,8 +239,8 @@ async verifyStudent(userId, adminId, { action, reason, departmentId, academicLev
    * Delete user
    */
   async deleteUser(userId, adminId) {
-    const [users] = await pool.query(
-      'SELECT id, role FROM users WHERE id = ?',
+    const { rows: users } = await pool.query(
+      'SELECT id, role FROM users WHERE id = $1',
       [userId]
     );
 
@@ -252,11 +252,11 @@ async verifyStudent(userId, adminId, { action, reason, departmentId, academicLev
       throw new AppError('Cannot delete admin accounts.', 403, 'CANNOT_DELETE_ADMIN');
     }
 
-    await pool.query('DELETE FROM users WHERE id = ?', [userId]);
+    await pool.query('DELETE FROM users WHERE id = $1', [userId]);
 
     await pool.query(
       `INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, description)
-       VALUES (?, 'user_deleted', 'user', ?, 'User deleted')`,
+      VALUES ($1, 'user_deleted', 'user', $2, 'User deleted')`,
       [adminId, userId]
     );
 
@@ -269,17 +269,17 @@ async verifyStudent(userId, adminId, { action, reason, departmentId, academicLev
   async getPendingVerifications({ page, limit }) {
     const { p, l, offset } = getPagination(page, limit);
 
-    const [countResult] = await pool.query(
-      `SELECT COUNT(*) as total FROM users WHERE verification_status = ? AND role = 'student'`,
+    const { rows: countResult } = await pool.query(
+      `SELECT COUNT(*) as total FROM users WHERE verification_status = $1 AND role = 'student'`,
       [VERIFICATION_STATUS.PENDING]
     );
 
-    const [users] = await pool.query(
+    const { rows: users } = await pool.query(
       `SELECT u.id, u.full_name, u.email, u.student_id, u.university_id_card, u.created_at
        FROM users u
-       WHERE u.verification_status = ? AND u.role = 'student'
+      WHERE u.verification_status = $1 AND u.role = 'student'
        ORDER BY u.created_at ASC
-       LIMIT ? OFFSET ?`,
+      LIMIT $2 OFFSET $3`,
       [VERIFICATION_STATUS.PENDING, l, offset]
     );
 
@@ -290,20 +290,20 @@ async verifyStudent(userId, adminId, { action, reason, departmentId, academicLev
    * Update user assignment
    */
   async updateAssignment(userId, adminId, { departmentId, academicLevelId, semesterId, facultyId }) {
-    const [users] = await pool.query('SELECT id FROM users WHERE id = ?', [userId]);
+    const { rows: users } = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
     if (users.length === 0) {
       throw new AppError('User not found.', 404, 'USER_NOT_FOUND');
     }
 
     await pool.query(
-      `UPDATE users SET department_id = ?, academic_level_id = ?, semester_id = ?, faculty_id = ?
-       WHERE id = ?`,
+      `UPDATE users SET department_id = $1, academic_level_id = $2, semester_id = $3, faculty_id = $4
+       WHERE id = $5`,
       [departmentId || null, academicLevelId || null, semesterId || null, facultyId || null, userId]
     );
 
     await pool.query(
       `INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, description)
-       VALUES (?, 'assignment_updated', 'user', ?, 'Academic assignment updated')`,
+      VALUES ($1, 'assignment_updated', 'user', $2, 'Academic assignment updated')`,
       [adminId, userId]
     );
 
