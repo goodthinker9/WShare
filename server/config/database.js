@@ -1,5 +1,26 @@
-require("dotenv").config();
+// require("dotenv").config();
 
+// const { Pool } = require("pg");
+
+// const pool = new Pool({
+//   connectionString: process.env.DATABASE_URL,
+//   ssl: {
+//     rejectUnauthorized: false,
+//   },
+// });
+
+// // Test connection
+// pool.connect()
+//   .then(client => {
+//     console.log("✓ Database connected successfully");
+//     client.release();
+//   })
+//   .catch(err => {
+//     console.error("✗ Database connection failed:", err.message);
+//   });
+
+// module.exports = pool;
+require("dotenv").config();
 const { Pool } = require("pg");
 
 const pool = new Pool({
@@ -8,15 +29,5 @@ const pool = new Pool({
     rejectUnauthorized: false,
   },
 });
-
-// Test connection
-pool.connect()
-  .then(client => {
-    console.log("✓ Database connected successfully");
-    client.release();
-  })
-  .catch(err => {
-    console.error("✗ Database connection failed:", err.message);
-  });
 
 module.exports = pool;
